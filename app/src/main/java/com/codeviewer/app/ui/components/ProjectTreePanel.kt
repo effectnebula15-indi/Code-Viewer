@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.codeviewer.app.data.FileRepository
 import com.codeviewer.app.ui.theme.LocalIdeColors
@@ -65,14 +67,18 @@ fun ProjectTreePanel(
     activeFilePath: String?,
     onToggleFolder: (String) -> Unit,
     onOpenFile: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentPaddingBottom: Dp = 0.dp
 ) {
     val ide = LocalIdeColors.current
     val repo = remember { FileRepository() }
     val nodes = remember(rootPath, expanded) { buildVisibleNodes(rootPath, expanded, repo) }
 
     Box(modifier = modifier.background(ide.panelBg)) {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = contentPaddingBottom)
+        ) {
             // Project root header
             item {
                 Row(

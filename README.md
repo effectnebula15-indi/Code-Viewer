@@ -12,9 +12,9 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 - Collapsible project tree with file-type badges
 
 ### IDE Workspace
+- Floating "bubble" toolbar and status bar over an edge-to-edge editor for more readable space
 - Editor tabs for multiple open files, with unsaved-change indicators
 - Project tree panel that toggles open/closed
-- Status bar showing language, line count and save state
 - JetBrains Mono for code, Inter for the interface
 
 ### Code Editor
@@ -22,6 +22,12 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 - Line-number gutter that stays aligned while scrolling vertically and horizontally
 - Edit mode with save and undo
 - In-file search with match highlighting and navigation
+- **Clickable links** — bare URLs in any file open in the browser
+
+### Markdown
+- `.md` files render as formatted Markdown in view mode (headings, bold/italic, inline code,
+  fenced code blocks with syntax highlighting, lists, block quotes, rules and links)
+- Switch to edit mode to edit the raw Markdown source
 
 ### Supported Languages
 | Language | Extensions |
@@ -102,9 +108,9 @@ app/src/main/java/com/codeviewer/app/
 │   └── languages/           # Language definitions (regex-based)
 ├── ui/
 │   ├── theme/               # 5 themes, colors, fonts, IDE chrome
-│   ├── components/          # Tree, tabs, editor, file badges
+│   ├── components/          # Tree, tabs, editor, markdown, file badges
 │   └── screens/             # Welcome, FolderPicker, IdeScreen
-└── util/                    # File utilities, permissions
+└── util/                    # File utilities, permissions, link detection
 ```
 
 ## License

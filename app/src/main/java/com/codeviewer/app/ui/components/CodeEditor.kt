@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,11 +29,14 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codeviewer.app.syntax.SyntaxHighlighter
 import com.codeviewer.app.ui.theme.JetBrainsMono
+import com.codeviewer.app.ui.theme.LocalIdeColors
 import com.codeviewer.app.ui.theme.LocalSyntaxColors
+import com.codeviewer.app.util.withDetectedLinks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -48,9 +52,12 @@ fun CodeEditor(
     isEditMode: Boolean,
     searchQuery: String,
     onContentChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    topInset: Dp = 0.dp,
+    bottomInset: Dp = 0.dp
 ) {
     val syntaxColors = LocalSyntaxColors.current
+    val linkColor = LocalIdeColors.current.accent
     val highlighter = remember { SyntaxHighlighter() }
 
     val codeStyle = remember(syntaxColors) {
@@ -78,6 +85,8 @@ fun CodeEditor(
             gutterWidth = gutterWidth,
             vScroll = vScroll,
             hScroll = hScroll,
+            topInset = topInset,
+            bottomInset = bottomInset,
             modifier = modifier
         )
     } else {
@@ -85,12 +94,15 @@ fun CodeEditor(
             content = content,
             languageKey = languageKey,
             searchQuery = searchQuery,
+            linkColor = linkColor,
             highlighter = highlighter,
             codeStyle = codeStyle,
             lineCount = lineCount,
             gutterWidth = gutterWidth,
             vScroll = vScroll,
             hScroll = hScroll,
+            topInset = topInset,
+            bottomInset = bottomInset,
             modifier = modifier
         )
     }
@@ -101,12 +113,15 @@ private fun ViewMode(
     content: String,
     languageKey: String,
     searchQuery: String,
+    linkColor: androidx.compose.ui.graphics.Color,
     highlighter: SyntaxHighlighter,
     codeStyle: TextStyle,
     lineCount: Int,
-    gutterWidth: androidx.compose.ui.unit.Dp,
+    gutterWidth: Dp,
     vScroll: androidx.compose.foundation.ScrollState,
     hScroll: androidx.compose.foundation.ScrollState,
+    topInset: Dp,
+    bottomInset: Dp,
     modifier: Modifier
 ) {
     val syntaxColors = LocalSyntaxColors.current
@@ -114,7 +129,7 @@ private fun ViewMode(
     // Highlight off the main thread, debounced; split into per-line spans.
     val highlightedLines by produceState(
         initialValue = content.lines().map { AnnotatedString(it) },
-        content, languageKey, searchQuery, syntaxColors
+        content, languageKey, searchQuery, syntaxColors, linkColor
     ) {
         delay(60)
         value = withContext(Dispatchers.Default) {
@@ -122,6 +137,7 @@ private fun ViewMode(
             if (searchQuery.length >= 2) {
                 annotated = applySearchHighlight(annotated, searchQuery, syntaxColors.selectionBg)
             }
+            annotated = annotated.withDetectedLinks(linkColor)
             splitAnnotatedStringByLines(annotated)
         }
     }
@@ -138,6 +154,7 @@ private fun ViewMode(
                 .width(gutterWidth)
                 .background(syntaxColors.gutterBg)
         ) {
+            Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
                 Box(
                     modifier = Modifier
@@ -152,6 +169,7 @@ private fun ViewMode(
                     )
                 }
             }
+            Spacer(Modifier.height(bottomInset))
         }
 
         // Code — horizontally scrollable, clipped to its own region.
@@ -161,6 +179,7 @@ private fun ViewMode(
                 .horizontalScroll(hScroll)
                 .padding(start = 6.dp, end = 16.dp)
         ) {
+            Spacer(Modifier.height(topInset))
             highlightedLines.forEach { line ->
                 Text(
                     text = line,
@@ -170,6 +189,7 @@ private fun ViewMode(
                     modifier = Modifier.height(CodeLineHeightDp)
                 )
             }
+            Spacer(Modifier.height(bottomInset))
         }
     }
 }
@@ -180,9 +200,11 @@ private fun EditMode(
     onContentChange: (String) -> Unit,
     codeStyle: TextStyle,
     lineCount: Int,
-    gutterWidth: androidx.compose.ui.unit.Dp,
+    gutterWidth: Dp,
     vScroll: androidx.compose.foundation.ScrollState,
     hScroll: androidx.compose.foundation.ScrollState,
+    topInset: Dp,
+    bottomInset: Dp,
     modifier: Modifier
 ) {
     val syntaxColors = LocalSyntaxColors.current
@@ -199,6 +221,7 @@ private fun EditMode(
                 .width(gutterWidth)
                 .background(syntaxColors.gutterBg)
         ) {
+            Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
                 Box(
                     modifier = Modifier
@@ -213,14 +236,16 @@ private fun EditMode(
                     )
                 }
             }
+            Spacer(Modifier.height(bottomInset))
         }
 
-        Box(
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .horizontalScroll(hScroll)
                 .padding(start = 6.dp, end = 16.dp)
         ) {
+            Spacer(Modifier.height(topInset))
             BasicTextField(
                 value = fieldValue,
                 onValueChange = {
@@ -231,6 +256,7 @@ private fun EditMode(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.width(2400.dp)
             )
+            Spacer(Modifier.height(bottomInset))
         }
     }
 }

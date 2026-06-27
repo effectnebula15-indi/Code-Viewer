@@ -20,8 +20,22 @@ class SyntaxHighlighter {
         }
     }
 
+    // Friendly language names map to the extension keys used above.
+    private val aliases = mapOf(
+        "kotlin" to "kt",
+        "python" to "py",
+        "javascript" to "js",
+        "typescript" to "ts",
+        "markdown" to "md",
+        "shell" to "sh",
+        "ruby" to "rb",
+        "rust" to "rs",
+        "cpp" to "c"
+    )
+
     fun highlight(code: String, languageKey: String, colors: SyntaxColors): AnnotatedString {
-        val lang = languages[languageKey] ?: GenericLanguage()
+        val key = languageKey.lowercase()
+        val lang = languages[key] ?: languages[aliases[key]] ?: GenericLanguage()
         val builder = AnnotatedString.Builder(code)
 
         builder.addStyle(SpanStyle(color = colors.plain), 0, code.length)
