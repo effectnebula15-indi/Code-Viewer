@@ -6,6 +6,7 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -44,7 +47,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codeviewer.app.data.FileRepository
@@ -52,6 +54,7 @@ import com.codeviewer.app.ui.components.CodeEditor
 import com.codeviewer.app.ui.components.CodeSearchBar
 import com.codeviewer.app.ui.components.EditorTab
 import com.codeviewer.app.ui.components.EditorTabBar
+import com.codeviewer.app.ui.components.MarkdownView
 import com.codeviewer.app.ui.components.ProjectTreePanel
 import com.codeviewer.app.ui.components.ThemePickerDialog
 import com.codeviewer.app.ui.theme.AppTheme
@@ -61,6 +64,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+private val TopReserve = 64.dp
+private val BottomClearance = 56.dp
+
 @Composable
 fun IdeScreen(
     projectPath: String,
@@ -68,7 +74,6 @@ fun IdeScreen(
     onThemeChange: (AppTheme) -> Unit,
     onCloseProject: () -> Unit
 ) {
-    val context = LocalContext.current
     val repo = remember { FileRepository() }
     val ide = LocalIdeColors.current
     val projectName = remember(projectPath) { File(projectPath).name.ifEmpty { "Project" } }
@@ -121,7 +126,6 @@ fun IdeScreen(
         expandedRaw = set.joinToString("\n")
     }
 
-    // Load file contents on demand (also after process death / recents resume).
     LaunchedEffect(activePath) {
         val p = activePath ?: return@LaunchedEffect
         if (!contents.containsKey(p)) {
@@ -151,6 +155,7 @@ fun IdeScreen(
     val languageKey = remember(activePath) {
         activePath?.let { FileUtils.getLanguageForExtension(File(it).extension) } ?: "generic"
     }
+    val isMarkdown = languageKey == "markdown"
     val matchCount = remember(activeContent, searchQuery) {
         if (searchQuery.length >= 2) {
             var count = 0
@@ -160,13 +165,92 @@ fun IdeScreen(
         } else 0
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ide.editorBg)
             .systemBarsPadding()
     ) {
-        IdeToolbar(
+        // ---- Main content (sits below the floating toolbar bubble) ----
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(Modifier.height(TopReserve))
+
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                AnimatedVisibility(
+                    visible = treeVisible,
+                    enter = expandHorizontally() + fadeIn(),
+                    exit = shrinkHorizontally() + fadeOut()
+                ) {
+                    ProjectTreePanel(
+                        rootPath = projectPath,
+                        projectName = projectName,
+                        expanded = expanded,
+                        activeFilePath = activePath,
+                        onToggleFolder = { toggleFolder(it) },
+                        onOpenFile = { openFile(it) },
+                        contentPaddingBottom = BottomClearance,
+                        modifier = Modifier.width(262.dp).fillMaxSize()
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .background(ide.editorBg)
+                ) {
+                    if (openPaths.isNotEmpty()) {
+                        EditorTabBar(
+                            tabs = openPaths.map {
+                                EditorTab(it, File(it).name, contents[it] != originals[it])
+                            },
+                            activeIndex = activeIndex,
+                            onSelect = { activeIndex = it; editMode = false },
+                            onClose = { closeTab(it) }
+                        )
+                    }
+
+                    CodeSearchBar(
+                        visible = showSearch && !isMarkdown,
+                        query = searchQuery,
+                        matchCount = matchCount,
+                        currentMatch = currentMatch,
+                        onQueryChange = { searchQuery = it; currentMatch = 0 },
+                        onNextMatch = { if (matchCount > 0) currentMatch = (currentMatch + 1) % matchCount },
+                        onPreviousMatch = { if (matchCount > 0) currentMatch = (currentMatch - 1 + matchCount) % matchCount },
+                        onClose = { showSearch = false; searchQuery = "" }
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxSize()
+                            .background(ide.editorBg)
+                            .imePadding()
+                    ) {
+                        when {
+                            activePath == null -> EmptyEditor()
+                            isMarkdown && !editMode -> MarkdownView(
+                                content = activeContent,
+                                bottomInset = BottomClearance
+                            )
+                            else -> CodeEditor(
+                                content = activeContent,
+                                languageKey = languageKey,
+                                isEditMode = editMode,
+                                searchQuery = searchQuery,
+                                onContentChange = { contents[activePath] = it },
+                                bottomInset = BottomClearance
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- Floating toolbar bubble ----
+        ToolbarBubble(
+            modifier = Modifier.align(Alignment.TopCenter),
             projectName = projectName,
             fileName = activePath?.let { File(it).name },
             editMode = editMode,
@@ -181,94 +265,26 @@ fun IdeScreen(
                 }
             },
             onUndo = {
-                activePath?.let { p ->
-                    contents[p] = originals[p] ?: ""
-                }
+                activePath?.let { p -> contents[p] = originals[p] ?: "" }
             },
             onSearch = { showSearch = !showSearch },
-            onTheme = { showThemeDialog = true },
-            onCloseProject = onCloseProject
+            onTheme = { showThemeDialog = true }
         )
 
-        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedVisibility(
-                visible = treeVisible,
-                enter = expandHorizontally() + fadeIn(),
-                exit = shrinkHorizontally() + fadeOut()
-            ) {
-                ProjectTreePanel(
-                    rootPath = projectPath,
-                    projectName = projectName,
-                    expanded = expanded,
-                    activeFilePath = activePath,
-                    onToggleFolder = { toggleFolder(it) },
-                    onOpenFile = { openFile(it) },
-                    modifier = Modifier.width(262.dp).fillMaxSize()
-                )
-            }
-
-            // Editor column
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .background(ide.editorBg)
-            ) {
-                if (openPaths.isNotEmpty()) {
-                    EditorTabBar(
-                        tabs = openPaths.map {
-                            EditorTab(it, File(it).name, contents[it] != originals[it])
-                        },
-                        activeIndex = activeIndex,
-                        onSelect = { activeIndex = it; editMode = false },
-                        onClose = { closeTab(it) }
-                    )
-                }
-
-                CodeSearchBar(
-                    visible = showSearch,
-                    query = searchQuery,
-                    matchCount = matchCount,
-                    currentMatch = currentMatch,
-                    onQueryChange = { searchQuery = it; currentMatch = 0 },
-                    onNextMatch = { if (matchCount > 0) currentMatch = (currentMatch + 1) % matchCount },
-                    onPreviousMatch = { if (matchCount > 0) currentMatch = (currentMatch - 1 + matchCount) % matchCount },
-                    onClose = { showSearch = false; searchQuery = "" }
-                )
-
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize()
-                        .background(ide.editorBg)
-                        .imePadding()
-                ) {
-                    if (activePath != null) {
-                        CodeEditor(
-                            content = activeContent,
-                            languageKey = languageKey,
-                            isEditMode = editMode,
-                            searchQuery = searchQuery,
-                            onContentChange = { contents[activePath] = it }
-                        )
-                    } else {
-                        EmptyEditor()
-                    }
-                }
-            }
-        }
-
-        StatusBar(
+        // ---- Floating status bubble ----
+        StatusBubble(
+            modifier = Modifier.align(Alignment.BottomCenter),
             language = if (activePath != null) languageKey else "",
             lineCount = if (activePath != null) activeContent.count { it == '\n' } + 1 else 0,
             modified = activeModified,
-            editMode = editMode
+            editMode = editMode && !(isMarkdown && !editMode)
         )
     }
 }
 
 @Composable
-private fun IdeToolbar(
+private fun ToolbarBubble(
+    modifier: Modifier,
     projectName: String,
     fileName: String?,
     editMode: Boolean,
@@ -279,94 +295,110 @@ private fun IdeToolbar(
     onSave: () -> Unit,
     onUndo: () -> Unit,
     onSearch: () -> Unit,
-    onTheme: () -> Unit,
-    onCloseProject: () -> Unit
+    onTheme: () -> Unit
 ) {
     val ide = LocalIdeColors.current
-    Row(
-        modifier = Modifier
+    Surface(
+        modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .background(ide.toolbarBg)
-            .padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .height(48.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = ide.toolbarBg,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, ide.border)
     ) {
-        IconButton(onClick = onToggleTree) {
-            Icon(Icons.AutoMirrored.Filled.MenuOpen, contentDescription = "Toggle project tree", tint = ide.mutedText)
-        }
-        Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-            Text(
-                text = projectName,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (fileName != null) {
+        Row(
+            modifier = Modifier.padding(start = 4.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onToggleTree) {
+                Icon(Icons.AutoMirrored.Filled.MenuOpen, contentDescription = "Toggle project tree", tint = ide.mutedText)
+            }
+            Column(modifier = Modifier.weight(1f).padding(start = 2.dp)) {
                 Text(
-                    text = (if (modified) "• " else "") + fileName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ide.mutedText,
+                    text = projectName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-            }
-        }
-        if (hasFile) {
-            IconButton(onClick = onSearch) {
-                Icon(Icons.Filled.Search, contentDescription = "Search", tint = ide.mutedText)
-            }
-            if (editMode && modified) {
-                IconButton(onClick = onUndo) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = ide.mutedText)
-                }
-                IconButton(onClick = onSave) {
-                    Icon(Icons.Filled.Save, contentDescription = "Save", tint = ide.accent)
+                if (fileName != null) {
+                    Text(
+                        text = (if (modified) "• " else "") + fileName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ide.mutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
-            IconButton(onClick = onToggleEdit) {
-                Icon(
-                    imageVector = if (editMode) Icons.Filled.Visibility else Icons.Filled.Edit,
-                    contentDescription = "Toggle edit",
-                    tint = if (editMode) ide.accent else ide.mutedText
-                )
+            if (hasFile) {
+                IconButton(onClick = onSearch) {
+                    Icon(Icons.Filled.Search, contentDescription = "Search", tint = ide.mutedText)
+                }
+                if (editMode && modified) {
+                    IconButton(onClick = onUndo) {
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = ide.mutedText)
+                    }
+                    IconButton(onClick = onSave) {
+                        Icon(Icons.Filled.Save, contentDescription = "Save", tint = ide.accent)
+                    }
+                }
+                IconButton(onClick = onToggleEdit) {
+                    Icon(
+                        imageVector = if (editMode) Icons.Filled.Visibility else Icons.Filled.Edit,
+                        contentDescription = "Toggle edit",
+                        tint = if (editMode) ide.accent else ide.mutedText
+                    )
+                }
             }
-        }
-        IconButton(onClick = onTheme) {
-            Icon(Icons.Filled.Palette, contentDescription = "Theme", tint = ide.mutedText)
+            IconButton(onClick = onTheme) {
+                Icon(Icons.Filled.Palette, contentDescription = "Theme", tint = ide.mutedText)
+            }
         }
     }
 }
 
 @Composable
-private fun StatusBar(
+private fun StatusBubble(
+    modifier: Modifier,
     language: String,
     lineCount: Int,
     modified: Boolean,
     editMode: Boolean
 ) {
     val ide = LocalIdeColors.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(24.dp)
-            .background(ide.statusBarBg)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    if (language.isEmpty()) return
+    Surface(
+        modifier = modifier
+            .padding(bottom = 12.dp)
+            .height(30.dp),
+        shape = RoundedCornerShape(15.dp),
+        color = ide.statusBarBg,
+        shadowElevation = 4.dp,
+        border = BorderStroke(1.dp, ide.border)
     ) {
-        if (language.isNotEmpty()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
             Text(
                 text = if (editMode) "EDIT" else "READ",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (editMode) ide.accent else ide.mutedText
             )
             Text(
-                text = "$lineCount lines",
+                text = "$lineCount ln",
                 style = MaterialTheme.typography.labelSmall,
                 color = ide.mutedText
             )
-            Spacer(Modifier.weight(1f))
+            Text(
+                text = language.replaceFirstChar { it.uppercase() },
+                style = MaterialTheme.typography.labelSmall,
+                color = ide.mutedText
+            )
             if (modified) {
                 Text(
                     text = "Unsaved",
@@ -374,23 +406,6 @@ private fun StatusBar(
                     color = ide.accent
                 )
             }
-            Text(
-                text = language.replaceFirstChar { it.uppercase() },
-                style = MaterialTheme.typography.labelSmall,
-                color = ide.mutedText
-            )
-            Text(
-                text = "UTF-8",
-                style = MaterialTheme.typography.labelSmall,
-                color = ide.mutedText
-            )
-        } else {
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "UTF-8",
-                style = MaterialTheme.typography.labelSmall,
-                color = ide.mutedText
-            )
         }
     }
 }
