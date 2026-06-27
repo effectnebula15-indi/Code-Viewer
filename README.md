@@ -1,24 +1,27 @@
 # Code-Viewer
 
-A native Android application for browsing, viewing, and editing source code files directly on your device.
+A native Android application for browsing, viewing, and editing source code files directly on your device — with a **JetBrains-inspired IDE interface**.
 
-Built with **Kotlin** and **Jetpack Compose** using **Material 3** design.
+Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and **Inter** typefaces.
 
 ## Features
 
-### File Browser
-- Navigate the device file system with a clean, intuitive interface
-- Breadcrumb navigation for quick path traversal
-- File type icons (folders, code files, generic files)
-- Sorted listing: directories first, then files alphabetically
-- File size display
+### Projects
+- Open any folder on your device as a project (JetBrains-style Welcome screen)
+- Recent projects list for quick re-opening
+- Collapsible project tree with file-type badges
+
+### IDE Workspace
+- Editor tabs for multiple open files, with unsaved-change indicators
+- Project tree panel that toggles open/closed
+- Status bar showing language, line count and save state
+- JetBrains Mono for code, Inter for the interface
 
 ### Code Editor
 - Syntax highlighting for 10 languages
-- Line numbers gutter
+- Line-number gutter that stays aligned while scrolling vertically and horizontally
 - Edit mode with save and undo
-- In-file search with match navigation
-- Horizontal scrolling for long lines
+- In-file search with match highlighting and navigation
 
 ### Supported Languages
 | Language | Extensions |
@@ -37,13 +40,13 @@ Built with **Kotlin** and **Jetpack Compose** using **Material 3** design.
 ### 5 Color Themes
 | Theme | Description |
 |-------|-------------|
-| Light | White background, dark text |
-| Dark | Standard dark theme |
-| Dark Purple | Dark background with purple accents |
+| Light | IntelliJ-style light theme |
+| Dark | Darcula-style dark theme |
+| Dark Purple | High-contrast dark with vivid purple accents |
 | Ultra Dark | Pure AMOLED black |
-| Dark Red | Dark background with red accents |
+| Dark Red | High-contrast dark with vivid red accents |
 
-All theme transitions are animated. Theme preference is persisted across app restarts.
+Each theme includes a matching syntax-highlighting palette and IDE chrome colours. Theme transitions are animated and the choice is persisted across app restarts.
 
 ## Screenshots
 
@@ -82,9 +85,9 @@ echo "sdk.dir=/path/to/your/android-sdk" > local.properties
 
 - **Language:** Kotlin
 - **UI:** Jetpack Compose + Material 3
-- **Navigation:** Jetpack Navigation Compose
-- **Persistence:** Jetpack DataStore
-- **Architecture:** Single Activity, Composable-based screens
+- **Persistence:** Jetpack DataStore (theme + recent projects)
+- **Architecture:** Single Activity; state-driven Welcome / IDE screens that survive process death
+- **Fonts:** JetBrains Mono (code) + Inter (UI)
 - **Min SDK:** 24 (Android 7.0)
 - **Target SDK:** 34 (Android 14)
 
@@ -92,17 +95,16 @@ echo "sdk.dir=/path/to/your/android-sdk" > local.properties
 
 ```
 app/src/main/java/com/codeviewer/app/
-├── MainActivity.kt
+├── MainActivity.kt          # Welcome ⇄ IDE state navigation
 ├── CodeViewerApp.kt
-├── data/                  # File system operations
-├── syntax/                # Syntax highlighting engine
-│   └── languages/         # Language definitions (regex-based)
+├── data/                    # FileRepository, ProjectStore
+├── syntax/                  # Syntax highlighting engine
+│   └── languages/           # Language definitions (regex-based)
 ├── ui/
-│   ├── theme/             # 5 themes, colors, typography
-│   ├── navigation/        # App navigation graph
-│   ├── components/        # Reusable UI components
-│   └── screens/           # FileBrowser, CodeViewer, Settings
-└── util/                  # File utilities, permissions
+│   ├── theme/               # 5 themes, colors, fonts, IDE chrome
+│   ├── components/          # Tree, tabs, editor, file badges
+│   └── screens/             # Welcome, FolderPicker, IdeScreen
+└── util/                    # File utilities, permissions
 ```
 
 ## License
