@@ -11,6 +11,8 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 - Recent projects list for quick re-opening
 - Collapsible project tree with file-type badges
 - **Create and delete files and folders** — `+` in the tree header, or long-press any item for New File / New Folder / Delete
+- **Find file** — search files by name across the whole project (toolbar ⋮ → Find file)
+- **Sorting** — by name (A→Z / Z→A), type, last modified, or **Custom** (drag the ≡ handle, or Move up/down from the context menu)
 - **Close project** from the toolbar overflow menu (with an unsaved-changes prompt)
 
 ### IDE Workspace
@@ -24,6 +26,7 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 - Line-number gutter that stays aligned while scrolling vertically and horizontally
 - Edit mode with a contextual action bar: Select All, **Delete selection**, Undo, Save
 - In-file search with match highlighting and navigation
+- **Pinch-to-zoom** and Text bigger/smaller controls to adjust the code font size (persisted)
 - **Clickable links** — bare URLs in any file open in the browser
 
 ### Markdown

@@ -9,6 +9,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,36 +23,46 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
-import androidx.compose.material.icons.automirrored.filled.NoteAdd
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.TextDecrease
+import androidx.compose.material.icons.filled.TextIncrease
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,16 +70,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.codeviewer.app.data.DEFAULT_FONT_SIZE
+import com.codeviewer.app.data.EditorSettings
 import com.codeviewer.app.data.FileRepository
+import com.codeviewer.app.data.MAX_FONT_SIZE
+import com.codeviewer.app.data.MIN_FONT_SIZE
+import com.codeviewer.app.data.SortMode
 import com.codeviewer.app.ui.components.CodeEditor
 import com.codeviewer.app.ui.components.CodeSearchBar
 import com.codeviewer.app.ui.components.ConfirmDialog
 import com.codeviewer.app.ui.components.EditorTab
 import com.codeviewer.app.ui.components.EditorTabBar
+import com.codeviewer.app.ui.components.FileSearchDialog
 import com.codeviewer.app.ui.components.MarkdownView
 import com.codeviewer.app.ui.components.ProjectTreePanel
 import com.codeviewer.app.ui.components.TextInputDialog
@@ -77,6 +95,7 @@ import com.codeviewer.app.ui.theme.AppTheme
 import com.codeviewer.app.ui.theme.LocalIdeColors
 import com.codeviewer.app.util.FileUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -90,9 +109,16 @@ fun IdeScreen(
     onThemeChange: (AppTheme) -> Unit,
     onCloseProject: () -> Unit
 ) {
+    val context = LocalContext.current
     val repo = remember { FileRepository() }
     val ide = LocalIdeColors.current
+    val scope = rememberCoroutineScope()
+    val settings = remember { EditorSettings(context.applicationContext) }
     val projectName = remember(projectPath) { File(projectPath).name.ifEmpty { "Project" } }
+
+    val fontSize by settings.fontSize.collectAsState(initial = DEFAULT_FONT_SIZE)
+    val sortMode by settings.sortMode.collectAsState(initial = SortMode.NAME_ASC)
+    val customOrder by settings.customOrder.collectAsState(initial = emptyMap())
 
     var openPathsRaw by rememberSaveable(projectPath) { mutableStateOf("") }
     var expandedRaw by rememberSaveable(projectPath) { mutableStateOf("") }
@@ -104,24 +130,20 @@ fun IdeScreen(
     var currentMatch by remember { mutableIntStateOf(0) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var showFileSearch by remember { mutableStateOf(false) }
 
-    // File-operation dialog state.
-    var createTarget by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // parentDir, isFolder
+    var createTarget by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
     val contents = remember(projectPath) { mutableStateMapOf<String, String>() }
     val originals = remember(projectPath) { mutableStateMapOf<String, String>() }
 
-    val openPaths = remember(openPathsRaw) {
-        openPathsRaw.split("\n").filter { it.isNotBlank() }
-    }
-    val expanded = remember(expandedRaw) {
-        expandedRaw.split("\n").filter { it.isNotBlank() }.toSet()
-    }
+    val openPaths = remember(openPathsRaw) { openPathsRaw.split("\n").filter { it.isNotBlank() } }
+    val expanded = remember(expandedRaw) { expandedRaw.split("\n").filter { it.isNotBlank() }.toSet() }
     val activePath = openPaths.getOrNull(activeIndex)
 
-    // Editable text + selection for the active file (controlled field).
     var editorValue by remember(activePath) { mutableStateOf(TextFieldValue("")) }
     LaunchedEffect(activePath, editMode) {
         if (editMode && activePath != null) {
@@ -171,17 +193,14 @@ fun IdeScreen(
     fun performCreate(parentDir: String, isFolder: Boolean, name: String) {
         if (isFolder) {
             repo.createFolder(parentDir, name)
+            if (parentDir != projectPath) setExpanded(expanded + parentDir)
+            refreshKey++
         } else {
             val created = repo.createFile(parentDir, name)
-            if (created != null) {
-                if (parentDir != projectPath) setExpanded(expanded + parentDir)
-                refreshKey++
-                openFile(created)
-                return
-            }
+            if (parentDir != projectPath) setExpanded(expanded + parentDir)
+            refreshKey++
+            if (created != null) openFile(created)
         }
-        if (parentDir != projectPath) setExpanded(expanded + parentDir)
-        refreshKey++
     }
 
     fun performDelete(path: String) {
@@ -194,6 +213,9 @@ fun IdeScreen(
     val anyModified = openPaths.any { contents[it] != null && contents[it] != originals[it] }
     fun requestCloseProject() {
         if (anyModified) showCloseConfirm = true else onCloseProject()
+    }
+    fun changeFont(delta: Int) {
+        scope.launch { settings.setFontSize((fontSize + delta).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE)) }
     }
 
     LaunchedEffect(activePath) {
@@ -220,15 +242,26 @@ fun IdeScreen(
             onDismiss = { showThemeDialog = false }
         )
     }
+    if (showSortDialog) {
+        SortDialog(
+            current = sortMode,
+            onSelect = { scope.launch { settings.setSortMode(it) }; showSortDialog = false },
+            onDismiss = { showSortDialog = false }
+        )
+    }
+    if (showFileSearch) {
+        FileSearchDialog(
+            rootPath = projectPath,
+            onOpenFile = { openFile(it) },
+            onDismiss = { showFileSearch = false }
+        )
+    }
     createTarget?.let { (parent, isFolder) ->
         TextInputDialog(
             title = if (isFolder) "New folder" else "New file",
             label = if (isFolder) "Folder name" else "File name (e.g. main.kt)",
             confirmText = "Create",
-            onConfirm = { name ->
-                performCreate(parent, isFolder, name)
-                createTarget = null
-            },
+            onConfirm = { name -> performCreate(parent, isFolder, name); createTarget = null },
             onDismiss = { createTarget = null }
         )
     }
@@ -268,7 +301,6 @@ fun IdeScreen(
         } else 0
     }
 
-    // ---- Editor commands ----
     fun selectAll() {
         editorValue = editorValue.copy(selection = TextRange(0, editorValue.text.length))
     }
@@ -276,10 +308,7 @@ fun IdeScreen(
         val sel = editorValue.selection
         val text = editorValue.text
         val newValue = when {
-            !sel.collapsed -> {
-                val start = sel.min
-                TextFieldValue(text.removeRange(start, sel.max), TextRange(start))
-            }
+            !sel.collapsed -> TextFieldValue(text.removeRange(sel.min, sel.max), TextRange(sel.min))
             sel.start > 0 -> TextFieldValue(text.removeRange(sel.start - 1, sel.start), TextRange(sel.start - 1))
             else -> editorValue
         }
@@ -309,6 +338,18 @@ fun IdeScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(Modifier.height(TopReserve))
 
+            // Full-width in-file search (kept above the tree so it is never squeezed).
+            CodeSearchBar(
+                visible = showSearch && activePath != null && !(isMarkdown && !editMode),
+                query = searchQuery,
+                matchCount = matchCount,
+                currentMatch = currentMatch,
+                onQueryChange = { searchQuery = it; currentMatch = 0 },
+                onNextMatch = { if (matchCount > 0) currentMatch = (currentMatch + 1) % matchCount },
+                onPreviousMatch = { if (matchCount > 0) currentMatch = (currentMatch - 1 + matchCount) % matchCount },
+                onClose = { showSearch = false; searchQuery = "" }
+            )
+
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 AnimatedVisibility(
                     visible = treeVisible,
@@ -321,11 +362,14 @@ fun IdeScreen(
                         expanded = expanded,
                         activeFilePath = activePath,
                         refreshKey = refreshKey,
+                        sortMode = sortMode,
+                        customOrder = customOrder,
                         onToggleFolder = { toggleFolder(it) },
                         onOpenFile = { openFile(it) },
                         onCreateFile = { parent -> createTarget = parent to false },
                         onCreateFolder = { parent -> createTarget = parent to true },
                         onDelete = { deleteTarget = it },
+                        onReorder = { dir, names -> scope.launch { settings.setCustomOrderFor(dir, names) } },
                         contentPaddingBottom = BottomClearance,
                         modifier = Modifier.width(262.dp).fillMaxSize()
                     )
@@ -358,17 +402,6 @@ fun IdeScreen(
                         )
                     }
 
-                    CodeSearchBar(
-                        visible = showSearch && !(isMarkdown && !editMode),
-                        query = searchQuery,
-                        matchCount = matchCount,
-                        currentMatch = currentMatch,
-                        onQueryChange = { searchQuery = it; currentMatch = 0 },
-                        onNextMatch = { if (matchCount > 0) currentMatch = (currentMatch + 1) % matchCount },
-                        onPreviousMatch = { if (matchCount > 0) currentMatch = (currentMatch - 1 + matchCount) % matchCount },
-                        onClose = { showSearch = false; searchQuery = "" }
-                    )
-
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -392,6 +425,8 @@ fun IdeScreen(
                                     editorValue = v
                                     activePath.let { contents[it] = v.text }
                                 },
+                                fontSize = fontSize,
+                                onFontSizeChange = { scope.launch { settings.setFontSize(it) } },
                                 bottomInset = BottomClearance
                             )
                         }
@@ -410,6 +445,10 @@ fun IdeScreen(
             onToggleTree = { treeVisible = !treeVisible },
             onToggleEdit = { editMode = !editMode },
             onSearch = { showSearch = !showSearch },
+            onFindFile = { showFileSearch = true },
+            onSort = { showSortDialog = true },
+            onTextBigger = { changeFont(1) },
+            onTextSmaller = { changeFont(-1) },
             onTheme = { showThemeDialog = true },
             onNewFile = { createTarget = projectPath to false },
             onNewFolder = { createTarget = projectPath to true },
@@ -437,6 +476,10 @@ private fun ToolbarBubble(
     onToggleTree: () -> Unit,
     onToggleEdit: () -> Unit,
     onSearch: () -> Unit,
+    onFindFile: () -> Unit,
+    onSort: () -> Unit,
+    onTextBigger: () -> Unit,
+    onTextSmaller: () -> Unit,
     onTheme: () -> Unit,
     onNewFile: () -> Unit,
     onNewFolder: () -> Unit,
@@ -481,7 +524,7 @@ private fun ToolbarBubble(
             }
             if (hasFile) {
                 IconButton(onClick = onSearch) {
-                    Icon(Icons.Filled.Search, contentDescription = "Search", tint = ide.mutedText)
+                    Icon(Icons.Filled.Search, contentDescription = "Search in file", tint = ide.mutedText)
                 }
                 IconButton(onClick = onToggleEdit) {
                     Icon(
@@ -496,6 +539,26 @@ private fun ToolbarBubble(
                     Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = ide.mutedText)
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Find file…") },
+                        leadingIcon = { Icon(Icons.Filled.Search, null) },
+                        onClick = { menu = false; onFindFile() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Sort…") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.Sort, null) },
+                        onClick = { menu = false; onSort() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Text bigger") },
+                        leadingIcon = { Icon(Icons.Filled.TextIncrease, null) },
+                        onClick = { onTextBigger() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Text smaller") },
+                        leadingIcon = { Icon(Icons.Filled.TextDecrease, null) },
+                        onClick = { onTextSmaller() }
+                    )
                     DropdownMenuItem(
                         text = { Text("New file") },
                         leadingIcon = { Icon(Icons.AutoMirrored.Filled.NoteAdd, null) },
@@ -536,13 +599,13 @@ private fun EditActionBar(
             .fillMaxWidth()
             .height(40.dp)
             .background(ide.toolbarBg)
+            .horizontalScroll(rememberScrollState())
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         ActionChip("Select all", Icons.Filled.SelectAll, ide.mutedText, onSelectAll)
         ActionChip("Delete", Icons.AutoMirrored.Filled.Backspace, ide.mutedText, onDelete)
-        Spacer(Modifier.weight(1f))
         if (modified) {
             ActionChip("Undo", Icons.AutoMirrored.Filled.Undo, ide.mutedText, onUndo)
             ActionChip("Save", Icons.Filled.Save, ide.accent, onSave)
@@ -563,6 +626,36 @@ private fun ActionChip(label: String, icon: ImageVector, tint: Color, onClick: (
         Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp), tint = tint)
         Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
     }
+}
+
+@Composable
+private fun SortDialog(
+    current: SortMode,
+    onSelect: (SortMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sort files", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column {
+                SortMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = mode == current, onClick = { onSelect(mode) })
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = mode == current, onClick = { onSelect(mode) })
+                        Spacer(Modifier.width(8.dp))
+                        Text(mode.displayName, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
 }
 
 @Composable

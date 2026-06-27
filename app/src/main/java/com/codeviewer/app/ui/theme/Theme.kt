@@ -180,22 +180,22 @@ internal val DarkSyntaxColors = SyntaxColors(
 )
 
 private val DarkPurpleSyntaxColors = SyntaxColors(
-    keyword = Color(0xFFC792EA),
-    string = Color(0xFF98D58A),
-    comment = Color(0xFF6E6184),
-    number = Color(0xFF7FD0E0),
-    type = Color(0xFFE0B0FF),
-    function = Color(0xFF82AAFF),
-    operator = Color(0xFFF1EAFA),
-    annotation = Color(0xFFE6C75C),
-    tag = Color(0xFFC792EA),
-    attribute = Color(0xFF9FB8FF),
-    plain = Color(0xFFE3DAF2),
-    lineNumber = Color(0xFF4A3D63),
-    lineNumberActive = Color(0xFFC2AEE0),
-    gutterBg = Color(0xFF120C1C),
-    selectionBg = Color(0xFF42286B),
-    currentLineBg = Color(0xFF1E1530)
+    keyword = Color(0xFFD9A6FF),
+    string = Color(0xFFA6E398),
+    comment = Color(0xFF796A92),
+    number = Color(0xFF8FDCEC),
+    type = Color(0xFFEBC4FF),
+    function = Color(0xFF93B8FF),
+    operator = Color(0xFFF7F1FF),
+    annotation = Color(0xFFF0D169),
+    tag = Color(0xFFD9A6FF),
+    attribute = Color(0xFFB0C6FF),
+    plain = Color(0xFFEDE3FB),
+    lineNumber = Color(0xFF4F4170),
+    lineNumberActive = Color(0xFFD2BEF0),
+    gutterBg = Color(0xFF0C0616),
+    selectionBg = Color(0xFF4A2C78),
+    currentLineBg = Color(0xFF180D2A)
 )
 
 private val UltraDarkSyntaxColors = SyntaxColors(
@@ -218,22 +218,22 @@ private val UltraDarkSyntaxColors = SyntaxColors(
 )
 
 private val DarkRedSyntaxColors = SyntaxColors(
-    keyword = Color(0xFFFF8A66),
-    string = Color(0xFF9CCC65),
-    comment = Color(0xFF7E5959),
-    number = Color(0xFFFFB74D),
-    type = Color(0xFFFFB0A8),
-    function = Color(0xFFFF8A80),
-    operator = Color(0xFFFCE4E4),
-    annotation = Color(0xFFE6C75C),
-    tag = Color(0xFFFF8A66),
-    attribute = Color(0xFFFFAB91),
-    plain = Color(0xFFF0D6D6),
-    lineNumber = Color(0xFF6B3838),
-    lineNumberActive = Color(0xFFE0A8A8),
-    gutterBg = Color(0xFF140A0A),
-    selectionBg = Color(0xFF5C2424),
-    currentLineBg = Color(0xFF20100F)
+    keyword = Color(0xFFFF9A78),
+    string = Color(0xFFAEDB72),
+    comment = Color(0xFF8A6060),
+    number = Color(0xFFFFC266),
+    type = Color(0xFFFFC0B9),
+    function = Color(0xFFFF9A92),
+    operator = Color(0xFFFFECEC),
+    annotation = Color(0xFFF0D169),
+    tag = Color(0xFFFF9A78),
+    attribute = Color(0xFFFFBCA3),
+    plain = Color(0xFFF8E2E2),
+    lineNumber = Color(0xFF6F3A3A),
+    lineNumberActive = Color(0xFFEDB6B6),
+    gutterBg = Color(0xFF0E0606),
+    selectionBg = Color(0xFF66262A),
+    currentLineBg = Color(0xFF1A0C0C)
 )
 
 // ---------------------------------------------------------------------------
@@ -268,17 +268,17 @@ internal val DarkIdeColors = IdeColors(
 )
 
 private val DarkPurpleIdeColors = IdeColors(
-    toolbarBg = Color(0xFF1C1330),
-    panelBg = Color(0xFF1A1228),
-    editorBg = Color(0xFF120C1C),
-    tabActiveBg = Color(0xFF120C1C),
-    tabInactiveBg = Color(0xFF1C1330),
-    tabAccent = Color(0xFFC792EA),
-    treeSelectionBg = Color(0xFF3A2460),
-    statusBarBg = Color(0xFF1C1330),
-    border = Color(0xFF2A1D44),
-    mutedText = Color(0xFF8A7BA8),
-    accent = Color(0xFFC792EA)
+    toolbarBg = Color(0xFF160B28),
+    panelBg = Color(0xFF130924),
+    editorBg = Color(0xFF0C0616),
+    tabActiveBg = Color(0xFF0C0616),
+    tabInactiveBg = Color(0xFF160B28),
+    tabAccent = Color(0xFFDCA8FF),
+    treeSelectionBg = Color(0xFF402A6B),
+    statusBarBg = Color(0xFF160B28),
+    border = Color(0xFF2B1A4A),
+    mutedText = Color(0xFF9A8BC0),
+    accent = Color(0xFFDCA8FF)
 )
 
 private val UltraDarkIdeColors = IdeColors(
@@ -296,17 +296,17 @@ private val UltraDarkIdeColors = IdeColors(
 )
 
 private val DarkRedIdeColors = IdeColors(
-    toolbarBg = Color(0xFF201111),
-    panelBg = Color(0xFF1C0F0F),
-    editorBg = Color(0xFF140A0A),
-    tabActiveBg = Color(0xFF140A0A),
-    tabInactiveBg = Color(0xFF201111),
-    tabAccent = Color(0xFFFF5C5C),
-    treeSelectionBg = Color(0xFF4A1F1F),
-    statusBarBg = Color(0xFF201111),
-    border = Color(0xFF321A1A),
-    mutedText = Color(0xFFA87B7B),
-    accent = Color(0xFFFF5C5C)
+    toolbarBg = Color(0xFF1A0C0C),
+    panelBg = Color(0xFF150909),
+    editorBg = Color(0xFF0E0606),
+    tabActiveBg = Color(0xFF0E0606),
+    tabInactiveBg = Color(0xFF1A0C0C),
+    tabAccent = Color(0xFFFF7373),
+    treeSelectionBg = Color(0xFF52201F),
+    statusBarBg = Color(0xFF1A0C0C),
+    border = Color(0xFF2C1414),
+    mutedText = Color(0xFFC08A8A),
+    accent = Color(0xFFFF7373)
 )
 
 // ---------------------------------------------------------------------------
