@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,14 +24,22 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,15 +56,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.codeviewer.app.data.FileRepository
 import com.codeviewer.app.ui.components.CodeEditor
 import com.codeviewer.app.ui.components.CodeSearchBar
+import com.codeviewer.app.ui.components.ConfirmDialog
 import com.codeviewer.app.ui.components.EditorTab
 import com.codeviewer.app.ui.components.EditorTabBar
 import com.codeviewer.app.ui.components.MarkdownView
 import com.codeviewer.app.ui.components.ProjectTreePanel
+import com.codeviewer.app.ui.components.TextInputDialog
 import com.codeviewer.app.ui.components.ThemePickerDialog
 import com.codeviewer.app.ui.theme.AppTheme
 import com.codeviewer.app.ui.theme.LocalIdeColors
@@ -86,7 +102,13 @@ fun IdeScreen(
     var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var currentMatch by remember { mutableIntStateOf(0) }
+    var refreshKey by remember { mutableIntStateOf(0) }
     var showThemeDialog by remember { mutableStateOf(false) }
+
+    // File-operation dialog state.
+    var createTarget by remember { mutableStateOf<Pair<String, Boolean>?>(null) } // parentDir, isFolder
+    var deleteTarget by remember { mutableStateOf<String?>(null) }
+    var showCloseConfirm by remember { mutableStateOf(false) }
 
     val contents = remember(projectPath) { mutableStateMapOf<String, String>() }
     val originals = remember(projectPath) { mutableStateMapOf<String, String>() }
@@ -99,23 +121,43 @@ fun IdeScreen(
     }
     val activePath = openPaths.getOrNull(activeIndex)
 
+    // Editable text + selection for the active file (controlled field).
+    var editorValue by remember(activePath) { mutableStateOf(TextFieldValue("")) }
+    LaunchedEffect(activePath, editMode) {
+        if (editMode && activePath != null) {
+            val text = contents[activePath] ?: ""
+            editorValue = TextFieldValue(text, TextRange(text.length))
+        }
+    }
+
+    fun setExpanded(set: Set<String>) { expandedRaw = set.joinToString("\n") }
+    fun setOpenPaths(list: List<String>) { openPathsRaw = list.joinToString("\n") }
+
     fun openFile(path: String) {
         val list = openPaths.toMutableList()
         if (path !in list) list.add(path)
-        openPathsRaw = list.joinToString("\n")
+        setOpenPaths(list)
         activeIndex = list.indexOf(path)
         editMode = false
         showSearch = false
         searchQuery = ""
     }
 
+    fun closeTabsUnder(path: String) {
+        val remaining = openPaths.filterNot { it == path || it.startsWith("$path/") }
+        openPaths.filter { it == path || it.startsWith("$path/") }.forEach {
+            contents.remove(it); originals.remove(it)
+        }
+        setOpenPaths(remaining)
+        if (activeIndex >= remaining.size) activeIndex = (remaining.size - 1).coerceAtLeast(0)
+    }
+
     fun closeTab(index: Int) {
         val list = openPaths.toMutableList()
         if (index in list.indices) {
             val p = list.removeAt(index)
-            contents.remove(p)
-            originals.remove(p)
-            openPathsRaw = list.joinToString("\n")
+            contents.remove(p); originals.remove(p)
+            setOpenPaths(list)
             if (activeIndex >= list.size) activeIndex = (list.size - 1).coerceAtLeast(0)
         }
     }
@@ -123,7 +165,35 @@ fun IdeScreen(
     fun toggleFolder(path: String) {
         val set = expanded.toMutableSet()
         if (!set.add(path)) set.remove(path)
-        expandedRaw = set.joinToString("\n")
+        setExpanded(set)
+    }
+
+    fun performCreate(parentDir: String, isFolder: Boolean, name: String) {
+        if (isFolder) {
+            repo.createFolder(parentDir, name)
+        } else {
+            val created = repo.createFile(parentDir, name)
+            if (created != null) {
+                if (parentDir != projectPath) setExpanded(expanded + parentDir)
+                refreshKey++
+                openFile(created)
+                return
+            }
+        }
+        if (parentDir != projectPath) setExpanded(expanded + parentDir)
+        refreshKey++
+    }
+
+    fun performDelete(path: String) {
+        closeTabsUnder(path)
+        if (path in expanded) setExpanded(expanded - path)
+        repo.delete(path)
+        refreshKey++
+    }
+
+    val anyModified = openPaths.any { contents[it] != null && contents[it] != originals[it] }
+    fun requestCloseProject() {
+        if (anyModified) showCloseConfirm = true else onCloseProject()
     }
 
     LaunchedEffect(activePath) {
@@ -138,15 +208,48 @@ fun IdeScreen(
     BackHandler {
         when {
             showSearch -> { showSearch = false; searchQuery = "" }
-            else -> onCloseProject()
+            else -> requestCloseProject()
         }
     }
 
+    // ---- Dialogs ----
     if (showThemeDialog) {
         ThemePickerDialog(
             currentTheme = currentTheme,
             onThemeSelected = { onThemeChange(it); showThemeDialog = false },
             onDismiss = { showThemeDialog = false }
+        )
+    }
+    createTarget?.let { (parent, isFolder) ->
+        TextInputDialog(
+            title = if (isFolder) "New folder" else "New file",
+            label = if (isFolder) "Folder name" else "File name (e.g. main.kt)",
+            confirmText = "Create",
+            onConfirm = { name ->
+                performCreate(parent, isFolder, name)
+                createTarget = null
+            },
+            onDismiss = { createTarget = null }
+        )
+    }
+    deleteTarget?.let { path ->
+        ConfirmDialog(
+            title = "Delete",
+            message = "Delete \"${File(path).name}\"? This cannot be undone.",
+            confirmText = "Delete",
+            destructive = true,
+            onConfirm = { performDelete(path); deleteTarget = null },
+            onDismiss = { deleteTarget = null }
+        )
+    }
+    if (showCloseConfirm) {
+        ConfirmDialog(
+            title = "Close project",
+            message = "You have unsaved changes. Close anyway?",
+            confirmText = "Close",
+            destructive = true,
+            onConfirm = { showCloseConfirm = false; onCloseProject() },
+            onDismiss = { showCloseConfirm = false }
         )
     }
 
@@ -165,13 +268,44 @@ fun IdeScreen(
         } else 0
     }
 
+    // ---- Editor commands ----
+    fun selectAll() {
+        editorValue = editorValue.copy(selection = TextRange(0, editorValue.text.length))
+    }
+    fun deleteSelection() {
+        val sel = editorValue.selection
+        val text = editorValue.text
+        val newValue = when {
+            !sel.collapsed -> {
+                val start = sel.min
+                TextFieldValue(text.removeRange(start, sel.max), TextRange(start))
+            }
+            sel.start > 0 -> TextFieldValue(text.removeRange(sel.start - 1, sel.start), TextRange(sel.start - 1))
+            else -> editorValue
+        }
+        editorValue = newValue
+        activePath?.let { contents[it] = newValue.text }
+    }
+    fun saveActive() {
+        activePath?.let { p ->
+            repo.writeFile(p, contents[p] ?: "")
+            originals[p] = contents[p] ?: ""
+        }
+    }
+    fun undoActive() {
+        activePath?.let { p ->
+            val text = originals[p] ?: ""
+            contents[p] = text
+            editorValue = TextFieldValue(text, TextRange(text.length))
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(ide.editorBg)
             .systemBarsPadding()
     ) {
-        // ---- Main content (sits below the floating toolbar bubble) ----
         Column(modifier = Modifier.fillMaxSize()) {
             Spacer(Modifier.height(TopReserve))
 
@@ -186,8 +320,12 @@ fun IdeScreen(
                         projectName = projectName,
                         expanded = expanded,
                         activeFilePath = activePath,
+                        refreshKey = refreshKey,
                         onToggleFolder = { toggleFolder(it) },
                         onOpenFile = { openFile(it) },
+                        onCreateFile = { parent -> createTarget = parent to false },
+                        onCreateFolder = { parent -> createTarget = parent to true },
+                        onDelete = { deleteTarget = it },
                         contentPaddingBottom = BottomClearance,
                         modifier = Modifier.width(262.dp).fillMaxSize()
                     )
@@ -210,8 +348,18 @@ fun IdeScreen(
                         )
                     }
 
+                    if (editMode && activePath != null) {
+                        EditActionBar(
+                            modified = activeModified,
+                            onSelectAll = { selectAll() },
+                            onDelete = { deleteSelection() },
+                            onUndo = { undoActive() },
+                            onSave = { saveActive() }
+                        )
+                    }
+
                     CodeSearchBar(
-                        visible = showSearch && !isMarkdown,
+                        visible = showSearch && !(isMarkdown && !editMode),
                         query = searchQuery,
                         matchCount = matchCount,
                         currentMatch = currentMatch,
@@ -239,7 +387,11 @@ fun IdeScreen(
                                 languageKey = languageKey,
                                 isEditMode = editMode,
                                 searchQuery = searchQuery,
-                                onContentChange = { contents[activePath] = it },
+                                editorValue = editorValue,
+                                onEditorValueChange = { v ->
+                                    editorValue = v
+                                    activePath.let { contents[it] = v.text }
+                                },
                                 bottomInset = BottomClearance
                             )
                         }
@@ -248,7 +400,6 @@ fun IdeScreen(
             }
         }
 
-        // ---- Floating toolbar bubble ----
         ToolbarBubble(
             modifier = Modifier.align(Alignment.TopCenter),
             projectName = projectName,
@@ -258,26 +409,19 @@ fun IdeScreen(
             hasFile = activePath != null,
             onToggleTree = { treeVisible = !treeVisible },
             onToggleEdit = { editMode = !editMode },
-            onSave = {
-                activePath?.let { p ->
-                    repo.writeFile(p, contents[p] ?: "")
-                    originals[p] = contents[p] ?: ""
-                }
-            },
-            onUndo = {
-                activePath?.let { p -> contents[p] = originals[p] ?: "" }
-            },
             onSearch = { showSearch = !showSearch },
-            onTheme = { showThemeDialog = true }
+            onTheme = { showThemeDialog = true },
+            onNewFile = { createTarget = projectPath to false },
+            onNewFolder = { createTarget = projectPath to true },
+            onCloseProject = { requestCloseProject() }
         )
 
-        // ---- Floating status bubble ----
         StatusBubble(
             modifier = Modifier.align(Alignment.BottomCenter),
             language = if (activePath != null) languageKey else "",
             lineCount = if (activePath != null) activeContent.count { it == '\n' } + 1 else 0,
             modified = activeModified,
-            editMode = editMode && !(isMarkdown && !editMode)
+            editMode = editMode
         )
     }
 }
@@ -292,12 +436,14 @@ private fun ToolbarBubble(
     hasFile: Boolean,
     onToggleTree: () -> Unit,
     onToggleEdit: () -> Unit,
-    onSave: () -> Unit,
-    onUndo: () -> Unit,
     onSearch: () -> Unit,
-    onTheme: () -> Unit
+    onTheme: () -> Unit,
+    onNewFile: () -> Unit,
+    onNewFolder: () -> Unit,
+    onCloseProject: () -> Unit
 ) {
     val ide = LocalIdeColors.current
+    var menu by remember { mutableStateOf(false) }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -309,7 +455,7 @@ private fun ToolbarBubble(
         border = BorderStroke(1.dp, ide.border)
     ) {
         Row(
-            modifier = Modifier.padding(start = 4.dp, end = 6.dp),
+            modifier = Modifier.padding(start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onToggleTree) {
@@ -337,14 +483,6 @@ private fun ToolbarBubble(
                 IconButton(onClick = onSearch) {
                     Icon(Icons.Filled.Search, contentDescription = "Search", tint = ide.mutedText)
                 }
-                if (editMode && modified) {
-                    IconButton(onClick = onUndo) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo", tint = ide.mutedText)
-                    }
-                    IconButton(onClick = onSave) {
-                        Icon(Icons.Filled.Save, contentDescription = "Save", tint = ide.accent)
-                    }
-                }
                 IconButton(onClick = onToggleEdit) {
                     Icon(
                         imageVector = if (editMode) Icons.Filled.Visibility else Icons.Filled.Edit,
@@ -353,10 +491,77 @@ private fun ToolbarBubble(
                     )
                 }
             }
-            IconButton(onClick = onTheme) {
-                Icon(Icons.Filled.Palette, contentDescription = "Theme", tint = ide.mutedText)
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = ide.mutedText)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("New file") },
+                        leadingIcon = { Icon(Icons.AutoMirrored.Filled.NoteAdd, null) },
+                        onClick = { menu = false; onNewFile() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("New folder") },
+                        leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
+                        onClick = { menu = false; onNewFolder() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Theme") },
+                        leadingIcon = { Icon(Icons.Filled.Palette, null) },
+                        onClick = { menu = false; onTheme() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Close project") },
+                        leadingIcon = { Icon(Icons.Filled.Close, null) },
+                        onClick = { menu = false; onCloseProject() }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun EditActionBar(
+    modified: Boolean,
+    onSelectAll: () -> Unit,
+    onDelete: () -> Unit,
+    onUndo: () -> Unit,
+    onSave: () -> Unit
+) {
+    val ide = LocalIdeColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .background(ide.toolbarBg)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        ActionChip("Select all", Icons.Filled.SelectAll, ide.mutedText, onSelectAll)
+        ActionChip("Delete", Icons.AutoMirrored.Filled.Backspace, ide.mutedText, onDelete)
+        Spacer(Modifier.weight(1f))
+        if (modified) {
+            ActionChip("Undo", Icons.AutoMirrored.Filled.Undo, ide.mutedText, onUndo)
+            ActionChip("Save", Icons.Filled.Save, ide.accent, onSave)
+        }
+    }
+}
+
+@Composable
+private fun ActionChip(label: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Icon(icon, contentDescription = label, modifier = Modifier.size(16.dp), tint = tint)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = tint)
     }
 }
 
@@ -389,22 +594,14 @@ private fun StatusBubble(
                 style = MaterialTheme.typography.labelSmall,
                 color = if (editMode) ide.accent else ide.mutedText
             )
-            Text(
-                text = "$lineCount ln",
-                style = MaterialTheme.typography.labelSmall,
-                color = ide.mutedText
-            )
+            Text("$lineCount ln", style = MaterialTheme.typography.labelSmall, color = ide.mutedText)
             Text(
                 text = language.replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.labelSmall,
                 color = ide.mutedText
             )
             if (modified) {
-                Text(
-                    text = "Unsaved",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ide.accent
-                )
+                Text("Unsaved", style = MaterialTheme.typography.labelSmall, color = ide.accent)
             }
         }
     }

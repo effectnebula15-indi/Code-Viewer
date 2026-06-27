@@ -18,10 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -51,7 +49,8 @@ fun CodeEditor(
     languageKey: String,
     isEditMode: Boolean,
     searchQuery: String,
-    onContentChange: (String) -> Unit,
+    editorValue: TextFieldValue,
+    onEditorValueChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier,
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
@@ -73,13 +72,14 @@ fun CodeEditor(
     val vScroll = rememberScrollState()
     val hScroll = rememberScrollState()
 
-    val lineCount = remember(content) { content.count { it == '\n' } + 1 }
+    val effectiveText = if (isEditMode) editorValue.text else content
+    val lineCount = remember(effectiveText) { effectiveText.count { it == '\n' } + 1 }
     val gutterWidth = ((lineCount.toString().length).coerceAtLeast(2) * 9 + 20).dp
 
     if (isEditMode) {
         EditMode(
-            content = content,
-            onContentChange = onContentChange,
+            value = editorValue,
+            onValueChange = onEditorValueChange,
             codeStyle = codeStyle,
             lineCount = lineCount,
             gutterWidth = gutterWidth,
@@ -126,7 +126,6 @@ private fun ViewMode(
 ) {
     val syntaxColors = LocalSyntaxColors.current
 
-    // Highlight off the main thread, debounced; split into per-line spans.
     val highlightedLines by produceState(
         initialValue = content.lines().map { AnnotatedString(it) },
         content, languageKey, searchQuery, syntaxColors, linkColor
@@ -148,7 +147,6 @@ private fun ViewMode(
             .background(syntaxColors.gutterBg)
             .verticalScroll(vScroll)
     ) {
-        // Gutter — stays put horizontally, scrolls vertically with the code.
         Column(
             modifier = Modifier
                 .width(gutterWidth)
@@ -156,23 +154,11 @@ private fun ViewMode(
         ) {
             Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
-                Box(
-                    modifier = Modifier
-                        .height(CodeLineHeightDp)
-                        .fillMaxWidth()
-                        .padding(end = 10.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Text(
-                        text = "${i + 1}",
-                        style = codeStyle.copy(color = syntaxColors.lineNumber)
-                    )
-                }
+                LineNumber(i + 1, codeStyle, syntaxColors.lineNumber)
             }
             Spacer(Modifier.height(bottomInset))
         }
 
-        // Code — horizontally scrollable, clipped to its own region.
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -196,8 +182,8 @@ private fun ViewMode(
 
 @Composable
 private fun EditMode(
-    content: String,
-    onContentChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     codeStyle: TextStyle,
     lineCount: Int,
     gutterWidth: Dp,
@@ -208,7 +194,6 @@ private fun EditMode(
     modifier: Modifier
 ) {
     val syntaxColors = LocalSyntaxColors.current
-    var fieldValue by remember(content) { mutableStateOf(TextFieldValue(content)) }
 
     Row(
         modifier = modifier
@@ -223,18 +208,7 @@ private fun EditMode(
         ) {
             Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
-                Box(
-                    modifier = Modifier
-                        .height(CodeLineHeightDp)
-                        .fillMaxWidth()
-                        .padding(end = 10.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Text(
-                        text = "${i + 1}",
-                        style = codeStyle.copy(color = syntaxColors.lineNumber)
-                    )
-                }
+                LineNumber(i + 1, codeStyle, syntaxColors.lineNumber)
             }
             Spacer(Modifier.height(bottomInset))
         }
@@ -247,17 +221,27 @@ private fun EditMode(
         ) {
             Spacer(Modifier.height(topInset))
             BasicTextField(
-                value = fieldValue,
-                onValueChange = {
-                    fieldValue = it
-                    onContentChange(it.text)
-                },
+                value = value,
+                onValueChange = onValueChange,
                 textStyle = codeStyle,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.width(2400.dp)
             )
             Spacer(Modifier.height(bottomInset))
         }
+    }
+}
+
+@Composable
+private fun LineNumber(number: Int, codeStyle: TextStyle, color: androidx.compose.ui.graphics.Color) {
+    Box(
+        modifier = Modifier
+            .height(CodeLineHeightDp)
+            .fillMaxWidth()
+            .padding(end = 10.dp),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        Text(text = "$number", style = codeStyle.copy(color = color))
     }
 }
 

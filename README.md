@@ -10,6 +10,8 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 - Open any folder on your device as a project (JetBrains-style Welcome screen)
 - Recent projects list for quick re-opening
 - Collapsible project tree with file-type badges
+- **Create and delete files and folders** — `+` in the tree header, or long-press any item for New File / New Folder / Delete
+- **Close project** from the toolbar overflow menu (with an unsaved-changes prompt)
 
 ### IDE Workspace
 - Floating "bubble" toolbar and status bar over an edge-to-edge editor for more readable space
@@ -20,7 +22,7 @@ Built with **Kotlin** and **Jetpack Compose**, using the **JetBrains Mono** and 
 ### Code Editor
 - Syntax highlighting for 10 languages
 - Line-number gutter that stays aligned while scrolling vertically and horizontally
-- Edit mode with save and undo
+- Edit mode with a contextual action bar: Select All, **Delete selection**, Undo, Save
 - In-file search with match highlighting and navigation
 - **Clickable links** — bare URLs in any file open in the browser
 
