@@ -57,4 +57,37 @@ class FileRepository {
         val file = File(path)
         return file.isFile && FileUtils.isTextFile(file) && file.length() < 5 * 1024 * 1024
     }
+
+    fun exists(parentDir: String, name: String): Boolean =
+        File(parentDir, name).exists()
+
+    /** Creates an empty file [name] inside [parentDir]. Returns the new path, or null on failure. */
+    fun createFile(parentDir: String, name: String): String? {
+        return try {
+            val file = File(parentDir, name)
+            file.parentFile?.mkdirs()
+            if (file.exists()) null else if (file.createNewFile()) file.absolutePath else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Creates a folder [name] (including intermediate dirs) inside [parentDir]. */
+    fun createFolder(parentDir: String, name: String): String? {
+        return try {
+            val dir = File(parentDir, name)
+            if (dir.exists()) null else if (dir.mkdirs()) dir.absolutePath else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Deletes a file or folder (recursively). */
+    fun delete(path: String): Boolean {
+        return try {
+            File(path).deleteRecursively()
+        } catch (_: Exception) {
+            false
+        }
+    }
 }

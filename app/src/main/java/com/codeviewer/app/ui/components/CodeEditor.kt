@@ -1,6 +1,7 @@
 package com.codeviewer.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +19,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -32,6 +36,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.codeviewer.app.data.MAX_FONT_SIZE
+import com.codeviewer.app.data.MIN_FONT_SIZE
 import com.codeviewer.app.syntax.SyntaxHighlighter
 import com.codeviewer.app.ui.theme.JetBrainsMono
 import com.codeviewer.app.ui.theme.LocalIdeColors
@@ -41,17 +47,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private val CodeFontSize = 13.sp
-private val CodeLineHeight = 20.sp
-private val CodeLineHeightDp = 20.dp
-
 @Composable
 fun CodeEditor(
     content: String,
     languageKey: String,
     isEditMode: Boolean,
     searchQuery: String,
-    onContentChange: (String) -> Unit,
+    editorValue: TextFieldValue,
+    onEditorValueChange: (TextFieldValue) -> Unit,
+    fontSize: Int,
+    onFontSizeChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
@@ -59,35 +64,59 @@ fun CodeEditor(
     val syntaxColors = LocalSyntaxColors.current
     val linkColor = LocalIdeColors.current.accent
     val highlighter = remember { SyntaxHighlighter() }
+    val density = LocalDensity.current
 
-    val codeStyle = remember(syntaxColors) {
+    val fontSizeSp = fontSize.sp
+    val lineHeightSp = (fontSize * 1.5f).sp
+    val lineHeightDp = with(density) { lineHeightSp.toDp() }
+
+    val codeStyle = remember(syntaxColors, fontSize) {
         TextStyle(
             fontFamily = JetBrainsMono,
-            fontSize = CodeFontSize,
-            lineHeight = CodeLineHeight,
+            fontSize = fontSizeSp,
+            lineHeight = lineHeightSp,
             color = syntaxColors.plain
         )
     }
 
-    // Shared vertical scroll keeps the gutter and code aligned at all times.
+    // Pinch-to-zoom adjusts the font size. Keyed on Unit so a pinch is not
+    // interrupted when the size (and thus recomposition) changes mid-gesture.
+    val currentFont by rememberUpdatedState(fontSize)
+    val accum = remember { mutableFloatStateOf(1f) }
+    val zoomModifier = Modifier.pointerInput(Unit) {
+        detectTransformGestures { _, _, zoom, _ ->
+            accum.floatValue *= zoom
+            while (accum.floatValue > 1.12f) {
+                onFontSizeChange((currentFont + 1).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE))
+                accum.floatValue /= 1.12f
+            }
+            while (accum.floatValue < 0.89f) {
+                onFontSizeChange((currentFont - 1).coerceIn(MIN_FONT_SIZE, MAX_FONT_SIZE))
+                accum.floatValue /= 0.89f
+            }
+        }
+    }
+
     val vScroll = rememberScrollState()
     val hScroll = rememberScrollState()
 
-    val lineCount = remember(content) { content.count { it == '\n' } + 1 }
-    val gutterWidth = ((lineCount.toString().length).coerceAtLeast(2) * 9 + 20).dp
+    val effectiveText = if (isEditMode) editorValue.text else content
+    val lineCount = remember(effectiveText) { effectiveText.count { it == '\n' } + 1 }
+    val gutterWidth = (lineCount.toString().length.coerceAtLeast(2) * (fontSize * 0.62f) + 18).dp
 
     if (isEditMode) {
         EditMode(
-            content = content,
-            onContentChange = onContentChange,
+            value = editorValue,
+            onValueChange = onEditorValueChange,
             codeStyle = codeStyle,
+            lineHeightDp = lineHeightDp,
             lineCount = lineCount,
             gutterWidth = gutterWidth,
             vScroll = vScroll,
             hScroll = hScroll,
             topInset = topInset,
             bottomInset = bottomInset,
-            modifier = modifier
+            modifier = modifier.then(zoomModifier)
         )
     } else {
         ViewMode(
@@ -97,13 +126,14 @@ fun CodeEditor(
             linkColor = linkColor,
             highlighter = highlighter,
             codeStyle = codeStyle,
+            lineHeightDp = lineHeightDp,
             lineCount = lineCount,
             gutterWidth = gutterWidth,
             vScroll = vScroll,
             hScroll = hScroll,
             topInset = topInset,
             bottomInset = bottomInset,
-            modifier = modifier
+            modifier = modifier.then(zoomModifier)
         )
     }
 }
@@ -113,9 +143,10 @@ private fun ViewMode(
     content: String,
     languageKey: String,
     searchQuery: String,
-    linkColor: androidx.compose.ui.graphics.Color,
+    linkColor: Color,
     highlighter: SyntaxHighlighter,
     codeStyle: TextStyle,
+    lineHeightDp: Dp,
     lineCount: Int,
     gutterWidth: Dp,
     vScroll: androidx.compose.foundation.ScrollState,
@@ -126,7 +157,6 @@ private fun ViewMode(
 ) {
     val syntaxColors = LocalSyntaxColors.current
 
-    // Highlight off the main thread, debounced; split into per-line spans.
     val highlightedLines by produceState(
         initialValue = content.lines().map { AnnotatedString(it) },
         content, languageKey, searchQuery, syntaxColors, linkColor
@@ -148,7 +178,6 @@ private fun ViewMode(
             .background(syntaxColors.gutterBg)
             .verticalScroll(vScroll)
     ) {
-        // Gutter — stays put horizontally, scrolls vertically with the code.
         Column(
             modifier = Modifier
                 .width(gutterWidth)
@@ -156,23 +185,11 @@ private fun ViewMode(
         ) {
             Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
-                Box(
-                    modifier = Modifier
-                        .height(CodeLineHeightDp)
-                        .fillMaxWidth()
-                        .padding(end = 10.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Text(
-                        text = "${i + 1}",
-                        style = codeStyle.copy(color = syntaxColors.lineNumber)
-                    )
-                }
+                LineNumber(i + 1, codeStyle, syntaxColors.lineNumber, lineHeightDp)
             }
             Spacer(Modifier.height(bottomInset))
         }
 
-        // Code — horizontally scrollable, clipped to its own region.
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -186,7 +203,7 @@ private fun ViewMode(
                     style = codeStyle,
                     softWrap = false,
                     maxLines = 1,
-                    modifier = Modifier.height(CodeLineHeightDp)
+                    modifier = Modifier.height(lineHeightDp)
                 )
             }
             Spacer(Modifier.height(bottomInset))
@@ -196,9 +213,10 @@ private fun ViewMode(
 
 @Composable
 private fun EditMode(
-    content: String,
-    onContentChange: (String) -> Unit,
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     codeStyle: TextStyle,
+    lineHeightDp: Dp,
     lineCount: Int,
     gutterWidth: Dp,
     vScroll: androidx.compose.foundation.ScrollState,
@@ -208,7 +226,6 @@ private fun EditMode(
     modifier: Modifier
 ) {
     val syntaxColors = LocalSyntaxColors.current
-    var fieldValue by remember(content) { mutableStateOf(TextFieldValue(content)) }
 
     Row(
         modifier = modifier
@@ -223,18 +240,7 @@ private fun EditMode(
         ) {
             Spacer(Modifier.height(topInset))
             for (i in 0 until lineCount) {
-                Box(
-                    modifier = Modifier
-                        .height(CodeLineHeightDp)
-                        .fillMaxWidth()
-                        .padding(end = 10.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    Text(
-                        text = "${i + 1}",
-                        style = codeStyle.copy(color = syntaxColors.lineNumber)
-                    )
-                }
+                LineNumber(i + 1, codeStyle, syntaxColors.lineNumber, lineHeightDp)
             }
             Spacer(Modifier.height(bottomInset))
         }
@@ -247,11 +253,8 @@ private fun EditMode(
         ) {
             Spacer(Modifier.height(topInset))
             BasicTextField(
-                value = fieldValue,
-                onValueChange = {
-                    fieldValue = it
-                    onContentChange(it.text)
-                },
+                value = value,
+                onValueChange = onValueChange,
                 textStyle = codeStyle,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.width(2400.dp)
@@ -261,20 +264,29 @@ private fun EditMode(
     }
 }
 
+@Composable
+private fun LineNumber(number: Int, codeStyle: TextStyle, color: Color, lineHeightDp: Dp) {
+    Box(
+        modifier = Modifier
+            .height(lineHeightDp)
+            .fillMaxWidth()
+            .padding(end = 10.dp),
+        contentAlignment = Alignment.CenterEnd
+    ) {
+        Text(text = "$number", style = codeStyle.copy(color = color))
+    }
+}
+
 private fun applySearchHighlight(
     source: AnnotatedString,
     query: String,
-    highlightColor: androidx.compose.ui.graphics.Color
+    highlightColor: Color
 ): AnnotatedString {
     val text = source.text
     val builder = AnnotatedString.Builder(source)
     var index = text.indexOf(query, ignoreCase = true)
     while (index >= 0) {
-        builder.addStyle(
-            SpanStyle(background = highlightColor),
-            index,
-            index + query.length
-        )
+        builder.addStyle(SpanStyle(background = highlightColor), index, index + query.length)
         index = text.indexOf(query, index + query.length, ignoreCase = true)
     }
     return builder.toAnnotatedString()
