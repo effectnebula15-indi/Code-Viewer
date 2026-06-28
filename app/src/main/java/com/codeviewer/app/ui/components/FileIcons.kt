@@ -44,6 +44,9 @@ private fun badgeFor(name: String): Badge {
     }
 }
 
+/** Tint used to colour a file's name in the tree according to its type. */
+fun fileTypeColor(name: String): Color = badgeFor(name).color
+
 @Composable
 fun FileTypeBadge(name: String, size: Dp = 16.dp) {
     val badge = badgeFor(name)

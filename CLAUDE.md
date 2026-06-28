@@ -45,8 +45,8 @@ cp app/build/outputs/apk/debug/app-debug.apk release/Code-Viewer.apk   # ship a 
   Friendly names (e.g. "kotlin") alias to extension keys in `SyntaxHighlighter.aliases`.
 - **Add a theme**: add colours in `Color.kt`, then a `ColorScheme` + `SyntaxColors` + `IdeColors`
   and a branch in `CodeViewerTheme`/`AppTheme` (`Theme.kt`).
-- **File operations**: `FileRepository` (createFile/createFolder/delete); tree menus live in
-  `ProjectTreePanel`, dialogs in `IdeScreen`.
+- **File operations**: `FileRepository` (createFile/createFolder/rename/delete); tree menus live in
+  `ProjectTreePanel` (file long-press = Rename/Delete; folder long-press = create), dialogs in `IdeScreen`.
 - **Tree sorting / custom order**: `SortMode` + sort logic in `ProjectTreePanel`; order persisted
   via `EditorSettings.setCustomOrderFor`.
 

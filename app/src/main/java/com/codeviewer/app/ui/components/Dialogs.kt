@@ -18,9 +18,10 @@ fun TextInputDialog(
     label: String,
     confirmText: String,
     onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    initialValue: String = ""
 ) {
-    var value by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf(initialValue) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleMedium) },
