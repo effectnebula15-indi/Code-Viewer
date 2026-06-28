@@ -82,6 +82,18 @@ class FileRepository {
         }
     }
 
+    /** Renames a file or folder to [newName] (kept in the same parent). Returns the new path, or null on failure. */
+    fun rename(path: String, newName: String): String? {
+        return try {
+            val source = File(path)
+            val target = File(source.parentFile, newName)
+            if (!source.exists() || target.exists()) null
+            else if (source.renameTo(target)) target.absolutePath else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** Deletes a file or folder (recursively). */
     fun delete(path: String): Boolean {
         return try {

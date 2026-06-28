@@ -134,6 +134,7 @@ fun IdeScreen(
     var showFileSearch by remember { mutableStateOf(false) }
 
     var createTarget by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var renameTarget by remember { mutableStateOf<String?>(null) }
     var deleteTarget by remember { mutableStateOf<String?>(null) }
     var showCloseConfirm by remember { mutableStateOf(false) }
 
@@ -148,7 +149,9 @@ fun IdeScreen(
     LaunchedEffect(activePath, editMode) {
         if (editMode && activePath != null) {
             val text = contents[activePath] ?: ""
-            editorValue = TextFieldValue(text, TextRange(text.length))
+            // Start at the top so entering edit mode does not auto-scroll to the
+            // bottom of the file (which made taps land near the last line).
+            editorValue = TextFieldValue(text, TextRange(0))
         }
     }
 
@@ -210,6 +213,17 @@ fun IdeScreen(
         refreshKey++
     }
 
+    fun performRename(path: String, newName: String) {
+        val newPath = repo.rename(path, newName) ?: return
+        // Carry any open tab (and its cached/edited content) over to the new path.
+        if (path in openPaths) {
+            setOpenPaths(openPaths.map { if (it == path) newPath else it })
+        }
+        contents.remove(path)?.let { contents[newPath] = it }
+        originals.remove(path)?.let { originals[newPath] = it }
+        refreshKey++
+    }
+
     val anyModified = openPaths.any { contents[it] != null && contents[it] != originals[it] }
     fun requestCloseProject() {
         if (anyModified) showCloseConfirm = true else onCloseProject()
@@ -263,6 +277,16 @@ fun IdeScreen(
             confirmText = "Create",
             onConfirm = { name -> performCreate(parent, isFolder, name); createTarget = null },
             onDismiss = { createTarget = null }
+        )
+    }
+    renameTarget?.let { path ->
+        TextInputDialog(
+            title = "Rename",
+            label = "New name",
+            confirmText = "Rename",
+            initialValue = File(path).name,
+            onConfirm = { name -> performRename(path, name); renameTarget = null },
+            onDismiss = { renameTarget = null }
         )
     }
     deleteTarget?.let { path ->
@@ -368,6 +392,7 @@ fun IdeScreen(
                         onOpenFile = { openFile(it) },
                         onCreateFile = { parent -> createTarget = parent to false },
                         onCreateFolder = { parent -> createTarget = parent to true },
+                        onRename = { renameTarget = it },
                         onDelete = { deleteTarget = it },
                         onReorder = { dir, names -> scope.launch { settings.setCustomOrderFor(dir, names) } },
                         contentPaddingBottom = BottomClearance,

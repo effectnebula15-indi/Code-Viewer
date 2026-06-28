@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
@@ -32,8 +35,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.codeviewer.app.data.MAX_FONT_SIZE
@@ -108,6 +115,8 @@ fun CodeEditor(
         EditMode(
             value = editorValue,
             onValueChange = onEditorValueChange,
+            languageKey = languageKey,
+            highlighter = highlighter,
             codeStyle = codeStyle,
             lineHeightDp = lineHeightDp,
             lineCount = lineCount,
@@ -215,6 +224,8 @@ private fun ViewMode(
 private fun EditMode(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
+    languageKey: String,
+    highlighter: SyntaxHighlighter,
     codeStyle: TextStyle,
     lineHeightDp: Dp,
     lineCount: Int,
@@ -227,40 +238,61 @@ private fun EditMode(
 ) {
     val syntaxColors = LocalSyntaxColors.current
 
+    // Keep code coloured while editing. Highlighting never changes the text
+    // length (only spans), so an identity offset mapping is correct. Very large
+    // files fall back to plain text to keep typing responsive.
+    val highlightTransformation = remember(languageKey, syntaxColors, highlighter) {
+        VisualTransformation { text ->
+            if (text.text.length > 20_000) {
+                TransformedText(text, OffsetMapping.Identity)
+            } else {
+                TransformedText(
+                    highlighter.highlight(text.text, languageKey, syntaxColors),
+                    OffsetMapping.Identity
+                )
+            }
+        }
+    }
+
     Row(
         modifier = modifier
             .fillMaxSize()
             .background(syntaxColors.gutterBg)
-            .verticalScroll(vScroll)
     ) {
-        Column(
+        // Gutter scrolls in lock-step with the text field via a manual offset so
+        // line numbers always line up with their lines.
+        Box(
             modifier = Modifier
                 .width(gutterWidth)
+                .fillMaxHeight()
+                .clipToBounds()
                 .background(syntaxColors.gutterBg)
         ) {
-            Spacer(Modifier.height(topInset))
-            for (i in 0 until lineCount) {
-                LineNumber(i + 1, codeStyle, syntaxColors.lineNumber, lineHeightDp)
+            Column(modifier = Modifier.offset { IntOffset(0, -vScroll.value) }) {
+                Spacer(Modifier.height(topInset))
+                for (i in 0 until lineCount) {
+                    LineNumber(i + 1, codeStyle, syntaxColors.lineNumber, lineHeightDp)
+                }
+                Spacer(Modifier.height(bottomInset))
             }
-            Spacer(Modifier.height(bottomInset))
         }
 
-        Column(
+        // The text field owns both scroll axes. Letting it manage its own
+        // scrolling (instead of nesting it in an outer verticalScroll) is what
+        // keeps taps mapping to the line you actually touched.
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = codeStyle,
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            visualTransformation = highlightTransformation,
             modifier = Modifier
                 .weight(1f)
+                .fillMaxHeight()
                 .horizontalScroll(hScroll)
-                .padding(start = 6.dp, end = 16.dp)
-        ) {
-            Spacer(Modifier.height(topInset))
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                textStyle = codeStyle,
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.width(2400.dp)
-            )
-            Spacer(Modifier.height(bottomInset))
-        }
+                .verticalScroll(vScroll)
+                .padding(start = 6.dp, end = 16.dp, top = topInset, bottom = bottomInset)
+        )
     }
 }
 

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.DropdownMenu
@@ -118,6 +119,7 @@ fun ProjectTreePanel(
     onOpenFile: (String) -> Unit,
     onCreateFile: (parentDir: String) -> Unit,
     onCreateFolder: (parentDir: String) -> Unit,
+    onRename: (path: String) -> Unit,
     onDelete: (path: String) -> Unit,
     onReorder: (dir: String, names: List<String>) -> Unit,
     modifier: Modifier = Modifier,
@@ -132,7 +134,6 @@ fun ProjectTreePanel(
     val overrides = remember(rootPath) { mutableStateMapOf<String, List<String>>() }
     var overrideVersion by remember(rootPath) { mutableIntStateOf(0) }
     var menuPath by remember { mutableStateOf<String?>(null) }
-    var headerMenu by remember { mutableStateOf(false) }
     var draggingPath by remember { mutableStateOf<String?>(null) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
@@ -160,47 +161,49 @@ fun ProjectTreePanel(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = contentPaddingBottom)
         ) {
-            item {
-                Box {
-                    Row(
+            stickyHeader {
+                // Pinned header: stays at the top while the tree scrolls, and
+                // offers direct new-file / new-folder buttons.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(ide.panelBg)
+                        .height(36.dp)
+                        .padding(start = 12.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = projectName.uppercase(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ide.mutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .padding(start = 12.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .size(32.dp)
+                            .combinedClickable(onClick = { onCreateFile(rootPath) }),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = projectName.uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = ide.mutedText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                        Icon(
+                            Icons.AutoMirrored.Filled.NoteAdd,
+                            contentDescription = "New file",
+                            modifier = Modifier.size(18.dp),
+                            tint = ide.mutedText
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .combinedClickable(onClick = { headerMenu = true }),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.NoteAdd,
-                                contentDescription = "New",
-                                modifier = Modifier.size(18.dp),
-                                tint = ide.mutedText
-                            )
-                        }
                     }
-                    DropdownMenu(expanded = headerMenu, onDismissRequest = { headerMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("New file") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.NoteAdd, null) },
-                            onClick = { headerMenu = false; onCreateFile(rootPath) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("New folder") },
-                            leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
-                            onClick = { headerMenu = false; onCreateFolder(rootPath) }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .combinedClickable(onClick = { onCreateFolder(rootPath) }),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Filled.CreateNewFolder,
+                            contentDescription = "New folder",
+                            modifier = Modifier.size(18.dp),
+                            tint = ide.mutedText
                         )
                     }
                 }
@@ -261,7 +264,8 @@ fun ProjectTreePanel(
                         Text(
                             text = node.name,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = if (node.isDirectory) MaterialTheme.colorScheme.onSurface
+                            else fileTypeColor(node.name),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -307,9 +311,9 @@ fun ProjectTreePanel(
                             )
                         } else {
                             DropdownMenuItem(
-                                text = { Text("New file") },
-                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.NoteAdd, null) },
-                                onClick = { menuPath = null; onCreateFile(File(node.path).parent ?: rootPath) }
+                                text = { Text("Rename") },
+                                leadingIcon = { Icon(Icons.Filled.DriveFileRenameOutline, null) },
+                                onClick = { menuPath = null; onRename(node.path) }
                             )
                         }
                         if (sortMode == SortMode.CUSTOM) {
